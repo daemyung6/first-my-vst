@@ -8,7 +8,15 @@ class WavetableSynth
 public:
     WavetableSynth();
     void prepareToPlay(double sampleRate);
-    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, float gainValue);
+    void processBlock(
+        juce::AudioBuffer<float>& buffer,
+        juce::MidiBuffer& midiMessages,
+        float gainValue,
+        float att,
+        float dec,
+        float sus,
+        float rel
+    );
 
 private:
     static std::vector<float> generateSineWaveTable();
@@ -19,6 +27,11 @@ private:
 
     double sampleRate;
     float gain = 0.f;
+    
+    int attSec = 10;
+    int decSec = 10;
+    
+    
     
     std::vector<WavetableOscillator> oscillators;
 };

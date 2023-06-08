@@ -2,7 +2,6 @@
 #include "WavetableSynth.h"
 
 
-
 WavetableSynth::WavetableSynth() {
 
 }
@@ -26,21 +25,6 @@ std::vector<float> WavetableSynth::generateSineWaveTable()
         sineWaveTable[i] = audioBuffer.getSample(0, i);
     }
     
-//    constexpr auto WAVETABLE_LENGTH = 64;
-//    const auto PI = std::atanf(1.f) * 4;
-//    std::vector<float> sineWaveTable = std::vector<float>(WAVETABLE_LENGTH);
-//
-//    auto temp = 0.f;
-//    for (auto i = 0; i < WAVETABLE_LENGTH; ++i)
-//    {
-//        temp = std::sinf(2 * PI * static_cast<float>(i) / WAVETABLE_LENGTH);
-//        if(temp > 0) {
-//            sineWaveTable[i] = 1.f;
-//        }
-//        else {
-//            sineWaveTable[i] = -1.f;
-//        }
-//    }
 
     return sineWaveTable;
 }
@@ -60,15 +44,31 @@ void WavetableSynth::initializeOscillators()
 void WavetableSynth::prepareToPlay(double sampleRate)
 {
     this->sampleRate = sampleRate;
-
     initializeOscillators();
 }
 
-void WavetableSynth::processBlock(juce::AudioBuffer<float>& buffer, 
-                                  juce::MidiBuffer& midiMessages, float gainValue)
-{
+void WavetableSynth::processBlock(
+    juce::AudioBuffer<float>& buffer,
+    juce::MidiBuffer& midiMessages,
+    float gainValue,
+    float att,
+    float dec,
+    float sus,
+    float rel
+) {
     gain = gainValue;
     auto currentSample = 0;
+    
+    auto param = juce::ADSR::Parameters (
+        att / attSec,
+        dec / decSec,
+        sus / 100.0f,
+        rel / decSec
+    );
+    
+    for(auto i = 0; i < oscillators.size(); i++) {
+        oscillators[i].env.setParameters(param);
+    }
 
     for (const auto midiMetadata : midiMessages)
     {
@@ -98,17 +98,23 @@ void WavetableSynth::handleMidiEvent(const juce::MidiMessage& midiMessage)
 //        const auto frequency = midiNoteNumberToFrequency(oscillatorId);
         const auto frequency = juce::MidiMessage::getMidiNoteInHertz (oscillatorId);
         oscillators[oscillatorId].setFrequency(frequency);
+        oscillators[oscillatorId].setVelocity(midiMessage.getVelocity());
+        
+        oscillators[oscillatorId].env.reset();
+        oscillators[oscillatorId].env.noteOn();
     }
     else if (midiMessage.isNoteOff())
     {
         const auto oscillatorId = midiMessage.getNoteNumber();
-        oscillators[oscillatorId].stop();
+        oscillators[oscillatorId].env.noteOff();
+//        oscillators[oscillatorId].stop();
     }
     else if (midiMessage.isAllNotesOff())
     {
         for (auto& oscillator : oscillators)
         {
-            oscillator.stop();
+            oscillator.env.noteOff();
+//            oscillator.stop();
         }
     }
 }
@@ -122,7 +128,14 @@ void WavetableSynth::render(juce::AudioBuffer<float>& buffer, int beginSample, i
         {
             for (auto sample = beginSample; sample < endSample; ++sample)
             {
-                firstChannel[sample] += oscillator.getSample() * gain;
+                firstChannel[sample] +=
+                    oscillator.getSample()
+                    * gain
+                    * oscillator.env.getNextSample()
+                    * oscillator.vel;
+                if(!oscillator.env.isActive()) {
+                    oscillator.stop();
+                }
             }
         }
     }

@@ -18,84 +18,47 @@ WavetableSynthAudioProcessorEditor::WavetableSynthAudioProcessorEditor (Wavetabl
     // editor's size to whatever you need it to be.
     knobImg = juce::ImageCache::getFromMemory(BinaryData::knob_png, BinaryData::knob_pngSize);
     
-    setSize (400, 300);
+    
+    
+    knobs.emplace_back(Knob(knobImg, 0, 0, audioProcessor.freq, "freq"));
+    knobs.emplace_back(Knob(knobImg, 100, 0, audioProcessor.res, "res"));
+    knobs.emplace_back(Knob(knobImg, 0, 100, audioProcessor.att, "att"));
+    knobs.emplace_back(Knob(knobImg, 100, 100, audioProcessor.dec, "dec"));
+    knobs.emplace_back(Knob(knobImg, 0, 200, audioProcessor.sus, "sus"));
+    knobs.emplace_back(Knob(knobImg, 100, 200, audioProcessor.rel, "rel"));
+    
+    setSize (400, 600);
+    startTimer(1000 / 30);
 }
 
 WavetableSynthAudioProcessorEditor::~WavetableSynthAudioProcessorEditor()
 {
-    audioProcessor.onEditorClose();
+//    audioProcessor.onEditorClose();
 }
 
 //==============================================================================
 void WavetableSynthAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
 
     g.setColour (juce::Colours::white);
     g.setFont (15.0f);
-    g.drawFittedText (std::to_string(audioProcessor.gainValue), getLocalBounds(), juce::Justification::centred, 1);
     
-    
-    
-    juce::String isPressStr;
-    if(isMousePress) {
-        isPressStr = "true";
-    }
-    else {
-        isPressStr = "false";
+    for(auto i = 0; i < knobs.size(); i++) {
+        knobs[i].paint(g);
     }
     
-    juce::Rectangle<int> pos1 (0, 0, getWidth(), 100);
-    g.drawFittedText (
-        "isMousePress: "
-        + isPressStr + " "
-        + std::to_string(mousePos[0]) + " "
-        + std::to_string(mousePos[1]) + ""
-    , pos1, juce::Justification::topLeft, 1);
-    
-    juce::AffineTransform transform (juce::AffineTransform::translation
-        (
-            (float) knobImg.getWidth()  / -2.0f,
-            (float) knobImg.getHeight() / -2.0f
-        )
-        .rotated ((audioProcessor.gainValue * 360.f) * 3.14f / 180.f)
-        .translated (
-            knobImgX, knobImgY
-        )
-    );
-    
-    
-    g.drawImageTransformed(knobImg, transform, false);
+    juce::Rectangle<int> textPosition (0, 300, 9999, 9999);
+    g.setColour (juce::Colours::white);
+
+    g.drawFittedText (audioProcessor.text, textPosition, juce::Justification::left, 1);
 }
 
 void WavetableSynthAudioProcessorEditor::resized()
 {
-    // This is generally where you'll want to lay out  the positions of any
-    // subcomponents in your editor..
+
 }
 
-//void WavetableSynthAudioProcessorEditor::sliderValueChanged (juce::Slider *slider) {
-//    if ((slider == &gainSlider) && isPressGainSlider) {
-//        auto value = static_cast<float>(gainSlider.getValue());
-//        audioProcessor.setGainValue(&value, sizeof(value));
-//        return;
-//    }
-//}
-//
-//void WavetableSynthAudioProcessorEditor::sliderDragStarted (juce::Slider *slider) {
-//    if (slider == &gainSlider) {
-//        isPressGainSlider = true;
-//        return;
-//    }
-//}
-//
-//void WavetableSynthAudioProcessorEditor::sliderDragEnded (juce::Slider *slider) {
-//    if (slider == &gainSlider) {
-//        isPressGainSlider = false;
-//        return;
-//    }
-//}
 void WavetableSynthAudioProcessorEditor::mouseDrag(const juce::MouseEvent &event) {
     juce::Point<int> point = event.getPosition();
     auto x = point.getX();
@@ -104,27 +67,28 @@ void WavetableSynthAudioProcessorEditor::mouseDrag(const juce::MouseEvent &event
     if(!isMousePress) {
         mousePos[0] = x;
         mousePos[1] = y;
-        
-        if(
-           (knobImgX - (knobImg.getWidth() / 2) < x) &&
-           (x < knobImgX + (knobImg.getWidth() / 2)) &&
-           (knobImgY - (knobImg.getHeight() / 2) < y) &&
-           (y < knobImgY + (knobImg.getHeight() / 2))
-           ) {
-               knobImgIsPress = true;
-           }
     }
     isMousePress = true;
+    for (auto i = 0; i < knobs.size(); i++) {
+        if(knobs[i].isPress(x, y) && !isKnobsPress) {
+            knobs[i].pressing = true;
+            isKnobsPress = true;
+        }
+    }
     
-    if(knobImgIsPress) {
-        float v = audioProcessor.gainValue + static_cast<float>(mousePos[1] - y) / 100.f;
-        if(v > 1.f) {
-            v = 1.f;
+    for (auto i = 0; i < knobs.size(); i++) {
+        if(knobs[i].pressing)
+        {
+            float v = static_cast<float>(*knobs[i].valuePoint);
+            v = v + static_cast<float>(mousePos[1] - y) * 0.1f;
+            if(v > 100.0f) {
+                v = 100.0f;
+            }
+            else if(v < 0.0f) {
+                v = 0.0f;
+            }
+            *knobs[i].valuePoint = juce::MemoryInputStream (&v, static_cast<size_t> (sizeof(v)), false).readFloat();
         }
-        else if(v < 0.f) {
-            v = 0.f;
-        }
-        audioProcessor.setGainValue(&v, sizeof(v));
     }
     
     
@@ -133,6 +97,11 @@ void WavetableSynthAudioProcessorEditor::mouseDrag(const juce::MouseEvent &event
 }
 void WavetableSynthAudioProcessorEditor::mouseUp(const juce::MouseEvent &event) {
     isMousePress = false;
-    
-    knobImgIsPress = false;
+    isKnobsPress = false;
+    for(auto i = 0; i < knobs.size(); i++) {
+        knobs[i].pressing = false;
+    }
+}
+void WavetableSynthAudioProcessorEditor::timerCallback() {
+    repaint();
 }

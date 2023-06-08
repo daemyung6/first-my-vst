@@ -11,6 +11,7 @@
 #include <JuceHeader.h>
 #include "WavetableSynth.h"
 
+
 //==============================================================================
 /**
 */
@@ -53,21 +54,30 @@ public:
     //==============================================================================
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
-    void setGainValue (const void* data, int sizeInBytes);
     
-    juce::AudioParameterFloat* gain;
-    float gainValue = 0.f;
+
+    
+    juce::AudioParameterFloat* freq;
+    juce::AudioParameterFloat* res;
+    juce::AudioParameterFloat* att;
+    juce::AudioParameterFloat* dec;
+    juce::AudioParameterFloat* sus;
+    juce::AudioParameterFloat* rel;
+    
     void onEditorClose();
+    
+    juce::String text = "";
 private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WavetableSynthAudioProcessor)
     WavetableSynth synth;
     
-    bool isClose = false;
-    void repaint();
+//    bool isClose = false;
+//    void repaint();
     juce::AudioProcessorEditor* editor;
     
     juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> lowPassFilter;
     void updateFilter();
     double lastSampleRate = 0;
+    
 };

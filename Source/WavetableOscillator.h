@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <JuceHeader.h>
 
 class WavetableOscillator
 {
@@ -14,7 +15,17 @@ public:
     void setFrequency(float frequency);
     void stop();
     bool isPlaying() const;
-
+    
+    bool isDec = false;
+    double dec = 0.f;
+    bool isAtt = true;
+    double att = 0.f;
+    
+    void setVelocity(juce::uint8 vel);
+    
+    juce::ADSR env;
+    
+    float vel = 0.0f;
 private:
     float interpolateLinearly() const;
 
@@ -22,5 +33,5 @@ private:
     float indexIncrement = 0.f;
     std::vector<float> waveTable;
     double sampleRate;
+    
 };
-

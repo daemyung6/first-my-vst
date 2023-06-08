@@ -23,16 +23,49 @@ WavetableSynthAudioProcessor::WavetableSynthAudioProcessor()
 #endif
 {
     
-    addParameter (gain = new juce::AudioParameterFloat ("gain", // parameterID
-                                                         "Gain", // parameter name
+    addParameter (freq = new juce::AudioParameterFloat ("freq", // parameterID
+                                                         "freq", // parameter name
                                                          0.0f,   // minimum value
-                                                         1.0f,   // maximum value
-                                                         0.5f)
+                                                         100.0f,   // maximum value
+                                                         100.0f)
+    );
+    
+    addParameter (res = new juce::AudioParameterFloat ("res", // parameterID
+                                                         "res", // parameter name
+                                                         0.0f,   // minimum value
+                                                       100.0f,   // maximum value
+                                                       0.0f)
+    );
+    addParameter (att = new juce::AudioParameterFloat ("att", // parameterID
+                                                         "att", // parameter name
+                                                         0.0f,   // minimum value
+                                                       100.0f,   // maximum value
+                                                       0.0f)
+    );
+    
+    addParameter (dec = new juce::AudioParameterFloat ("dec", // parameterID
+                                                         "dec", // parameter name
+                                                         0.0f,   // minimum value
+                                                       100.0f,   // maximum value
+                                                       50.0f)
+    );
+    addParameter (sus = new juce::AudioParameterFloat ("sus", // parameterID
+                                                         "sus", // parameter name
+                                                         0.0f,   // minimum value
+                                                       100.0f,   // maximum value
+                                                       100.0f)
+    );
+    addParameter (rel = new juce::AudioParameterFloat ("rel", // parameterID
+                                                         "rel", // parameter name
+                                                         0.0f,   // minimum value
+                                                       100.0f,   // maximum value
+                                                       1.0f)
     );
 }
 
 WavetableSynthAudioProcessor::~WavetableSynthAudioProcessor()
 {
+    
 }
 
 //==============================================================================
@@ -144,23 +177,35 @@ bool WavetableSynthAudioProcessor::isBusesLayoutSupported (const BusesLayout& la
 
 
 void WavetableSynthAudioProcessor::updateFilter() {
-    *lowPassFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(lastSampleRate, gainValue * 5000.0f + 1.f, 5.f);
+    *lowPassFilter.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(lastSampleRate, (*freq / 100.0f) * 5000.0f + 2.f, 10.f * (*res / 100.0f) + 0.5f);
 }
 
 void WavetableSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    buffer.applyGain (*gain);
-    gainValue = *gain;
-    repaint();
-
+    /* update param*/
+    buffer.applyGain (*freq);
+    buffer.applyGain (*res);
+    buffer.applyGain (*att);
+    buffer.applyGain (*dec);
+    buffer.applyGain (*sus);
+    buffer.applyGain (*rel);
     
+
     juce::ScopedNoDenormals noDenormals;
 
     for (auto i = 0; i < buffer.getNumChannels(); ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-//    synth.processBlock(buffer, midiMessages, gainValue);
-    synth.processBlock(buffer, midiMessages, 0.2f);
+    
+    synth.processBlock(
+        buffer,
+        midiMessages,
+        0.8f,
+        *att,
+        *dec,
+        *sus,
+        *rel
+    );
     
     juce::dsp::AudioBlock<float> block (buffer);
     updateFilter();
@@ -176,20 +221,9 @@ bool WavetableSynthAudioProcessor::hasEditor() const
 juce::AudioProcessorEditor* WavetableSynthAudioProcessor::createEditor()
 {
     editor = new WavetableSynthAudioProcessorEditor (*this);
-    isClose = true;
     return editor;
 }
-void WavetableSynthAudioProcessor::repaint ()
-{
-    if(!isClose) {
-        return;
-    }
-    editor->repaint();
-}
-void WavetableSynthAudioProcessor::onEditorClose ()
-{
-    isClose = false;
-}
+
 
 //==============================================================================
 void WavetableSynthAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
@@ -197,18 +231,93 @@ void WavetableSynthAudioProcessor::getStateInformation (juce::MemoryBlock& destD
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
-    juce::MemoryOutputStream (destData, true).writeFloat (*gain);
+    juce::XmlElement xml = juce::XmlElement("root");
+    
+    juce::XmlElement* child;
+    
+    child = xml.createNewChildElement("freq");
+    child->setAttribute("value", freq->get());
+    
+    child = xml.createNewChildElement("res");
+    child->setAttribute("value", res->get());
+    
+    child = xml.createNewChildElement("att");
+    child->setAttribute("value", att->get());
+    
+    child = xml.createNewChildElement("dec");
+    child->setAttribute("value", dec->get());
+    
+    child = xml.createNewChildElement("sus");
+    child->setAttribute("value", sus->get());
+    
+    child = xml.createNewChildElement("rel");
+    child->setAttribute("value", rel->get());
+    
+    
+    juce::MemoryOutputStream (destData, true).writeString(xml.toString());
 }
 
 void WavetableSynthAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
-    *gain = juce::MemoryInputStream (data, static_cast<size_t> (sizeInBytes), false).readFloat();
-}
-void WavetableSynthAudioProcessor::setGainValue (const void* data, int sizeInBytes)
-{
-    *gain = juce::MemoryInputStream (data, static_cast<size_t> (sizeInBytes), false).readFloat();
+//     *freq = juce::MemoryInputStream (data, static_cast<size_t> (sizeInBytes), false).readFloat();
+    juce::String xmlStr = juce::MemoryInputStream (data, static_cast<size_t> (sizeInBytes), false).readString();
+
+    juce::XmlDocument myDocument = juce::XmlDocument(xmlStr);
+    
+    if (auto mainElement = myDocument.getDocumentElement()) {
+        auto* p = mainElement.get();
+        
+        auto tagName = p->getTagName();
+        text += "parse on\n";
+        if(tagName == "root") {
+            auto i = -1;
+            
+            while(1) {
+                i++;
+                auto* child = p->getChildElement(i);
+                if(child == nullptr) { return; }
+                
+                juce::String name = child->getTagName();
+                auto val = child->getAttributeValue(0);
+                float v = val.getFloatValue();
+                text += "name: " + name + " getString: " + val + " --> float: " + std::to_string(v) + "\n";
+                
+                if(name == "freq") {
+                    *freq = juce::MemoryInputStream (&v, static_cast<size_t> (sizeof(v)), false).readFloat();
+                    continue;
+                }
+                else if(name == "res") {
+                    *res = juce::MemoryInputStream (&v, static_cast<size_t> (sizeof(v)), false).readFloat();
+                    continue;
+                }
+                else if(name == "att") {
+                    *att = juce::MemoryInputStream (&v, static_cast<size_t> (sizeof(v)), false).readFloat();
+                    continue;
+                }
+                else if(name == "dec") {
+                    *dec = juce::MemoryInputStream (&v, static_cast<size_t> (sizeof(v)), false).readFloat();
+                    continue;
+                }
+                else if(name == "sus") {
+                    *sus = juce::MemoryInputStream (&v, static_cast<size_t> (sizeof(v)), false).readFloat();
+                    continue;
+                }
+                else if(name == "rel") {
+                    *rel = juce::MemoryInputStream (&v, static_cast<size_t> (sizeof(v)), false).readFloat();
+                    continue;
+                }
+            }
+        }
+        else {
+            return;
+        }
+    }
+    else {
+        juce::String error = myDocument.getLastParseError();
+        text += "parse err: " + error + "\n";
+    }
 }
 
 

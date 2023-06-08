@@ -6,7 +6,9 @@
 WavetableOscillator::WavetableOscillator(std::vector<float> waveTable, double sampleRate)
 : waveTable{ std::move(waveTable) },
     sampleRate{ sampleRate }
-{}
+{
+    env.setSampleRate(sampleRate);
+}
 
 float WavetableOscillator::getSample()
 {
@@ -14,6 +16,7 @@ float WavetableOscillator::getSample()
     index = std::fmod(index, static_cast<float>(waveTable.size()));
     const auto sample = interpolateLinearly();
     index += indexIncrement;
+    
     return sample;
 }
 
@@ -46,3 +49,6 @@ float WavetableOscillator::interpolateLinearly() const
                             (1.f - nextIndexWeight) * waveTable[truncatedIndex];
 }
 
+void WavetableOscillator::setVelocity(juce::uint8 _vel) {
+    vel = static_cast<float>(_vel / 172.0f);
+}
